@@ -98,6 +98,24 @@ erDiagram
     AUDIT_LOGS }o--|| CUSTOMERS : "audits"
     AUDIT_LOGS }o--|| ACCOUNTS : "audits"
     AUDIT_LOGS }o--|| TRANSACTIONS : "audits"
+
+    PRODUCT_CATEGORIES {
+        SMALLSERIAL id PK
+        TEXT name
+    }
+
+    PRODUCT_CATALOGUE {
+        BIGSERIAL id PK
+        SMALLINT category_id FK
+        TEXT product_code
+        TEXT name
+        NUM price
+        NUM interest_rate
+        INT term_months
+    }
+
+    PRODUCT_CATEGORIES ||--o{ PRODUCT_CATALOGUE : contains
+    PRODUCT_CATALOGUE }o--|| ACCOUNTS : "can be linked (optional)"
 ```
 
 Notes:

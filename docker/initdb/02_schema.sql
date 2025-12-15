@@ -140,6 +140,27 @@ CREATE TABLE audit_logs (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Product catalogue (categories + products)
+CREATE TABLE product_categories (
+    id SMALLSERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT
+);
+
+CREATE TABLE product_catalogue (
+    id BIGSERIAL PRIMARY KEY,
+    category_id SMALLINT NOT NULL REFERENCES product_categories(id) ON DELETE RESTRICT,
+    product_code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    description TEXT,
+    currency CHAR(3) DEFAULT 'CAD',
+    price NUMERIC(18,2) DEFAULT 0,
+    interest_rate NUMERIC(6,4),
+    term_months INT,
+    status TEXT DEFAULT 'active',
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- Helper function to generate account numbers
 CREATE OR REPLACE FUNCTION generate_account_number() RETURNS TEXT AS $$
 DECLARE

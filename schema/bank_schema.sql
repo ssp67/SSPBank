@@ -13,19 +13,32 @@ CREATE TABLE customers (
     email TEXT UNIQUE,
     phone TEXT,
     address TEXT,
+    province CHAR(2),
+    postal_code TEXT,
+    country TEXT DEFAULT 'CA',
     created_at TIMESTAMPTZ DEFAULT now(),
     status TEXT DEFAULT 'active'
 );
 
 -- Branches
+-- Canadian provinces + territories
+CREATE TABLE provinces (
+    code CHAR(2) PRIMARY KEY,
+    name TEXT NOT NULL
+);
+
+INSERT INTO provinces (code, name) VALUES
+('AB','Alberta'),('BC','British Columbia'),('MB','Manitoba'),('NB','New Brunswick'),('NL','Newfoundland and Labrador'),('NS','Nova Scotia'),('ON','Ontario'),('PE','Prince Edward Island'),('QC','Quebec'),('SK','Saskatchewan'),('NT','Northwest Territories'),('NU','Nunavut'),('YT','Yukon')
+ON CONFLICT DO NOTHING;
+
 CREATE TABLE branches (
     id BIGSERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     address TEXT,
     city TEXT,
-    state TEXT,
-    zip TEXT,
-    country TEXT DEFAULT 'US',
+    province CHAR(2) REFERENCES provinces(code),
+    postal_code TEXT,
+    country TEXT DEFAULT 'CA',
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -59,7 +72,7 @@ CREATE TABLE accounts (
     customer_id BIGINT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
     branch_id BIGINT REFERENCES branches(id),
     type_id SMALLINT NOT NULL REFERENCES account_types(id),
-    currency CHAR(3) DEFAULT 'USD',
+    currency CHAR(3) DEFAULT 'CAD',
     balance NUMERIC(18,2) DEFAULT 0 NOT NULL,
     overdraft_limit NUMERIC(18,2) DEFAULT 0,
     status TEXT DEFAULT 'open',
@@ -77,7 +90,7 @@ CREATE TABLE transactions (
     from_account_id BIGINT REFERENCES accounts(id) ON DELETE SET NULL,
     to_account_id BIGINT REFERENCES accounts(id) ON DELETE SET NULL,
     amount NUMERIC(18,2) NOT NULL CHECK (amount > 0),
-    currency CHAR(3) DEFAULT 'USD',
+    currency CHAR(3) DEFAULT 'CAD',
     type TEXT NOT NULL, -- deposit, withdrawal, transfer, payment, fee, interest, reversal
     status TEXT NOT NULL DEFAULT 'pending', -- pending, posted, reversed, failed
     description TEXT,
@@ -138,6 +151,27 @@ CREATE TABLE audit_logs (
     table_name TEXT,
     row_id TEXT,
     details JSONB,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Product catalogue
+CREATE TABLE product_categories (
+    id SMALLSERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT
+);
+
+CREATE TABLE product_catalogue (
+    id BIGSERIAL PRIMARY KEY,
+    category_id SMALLINT NOT NULL REFERENCES product_categories(id) ON DELETE RESTRICT,
+    product_code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    description TEXT,
+    currency CHAR(3) DEFAULT 'CAD',
+    price NUMERIC(18,2) DEFAULT 0,
+    interest_rate NUMERIC(6,4),
+    term_months INT,
+    status TEXT DEFAULT 'active',
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
