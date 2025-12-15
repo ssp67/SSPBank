@@ -34,11 +34,17 @@ erDiagram
     ACCOUNTS {
         BIGSERIAL id PK
         TEXT account_number
-        BIGINT customer_id FK
         BIGINT branch_id FK
         SMALLINT type_id FK
         NUM balance
         NUM overdraft_limit
+    }
+
+    ACCOUNT_OWNERS {
+        BIGINT account_id FK
+        BIGINT customer_id FK
+        BOOL is_primary
+        NUM ownership_percent
     }
 
     TRANSACTIONS {
@@ -82,7 +88,8 @@ erDiagram
         TIMESTAMP created_at
     }
 
-    CUSTOMERS ||--o{ ACCOUNTS : has
+    CUSTOMERS ||--o{ ACCOUNT_OWNERS : owns
+    ACCOUNTS ||--o{ ACCOUNT_OWNERS : has_owners
     BRANCHES ||--o{ ACCOUNTS : hosts
     ACCOUNT_TYPES ||--o{ ACCOUNTS : defines
     ACCOUNTS ||--o{ TRANSACTIONS : "from_account"

@@ -69,7 +69,6 @@ VALUES (1,'checking',0,'Standard checking account'), (2,'savings',0.01,'Interest
 CREATE TABLE accounts (
     id BIGSERIAL PRIMARY KEY,
     account_number TEXT UNIQUE NOT NULL,
-    customer_id BIGINT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
     branch_id BIGINT REFERENCES branches(id),
     type_id SMALLINT NOT NULL REFERENCES account_types(id),
     currency CHAR(3) DEFAULT 'CAD',
@@ -80,8 +79,19 @@ CREATE TABLE accounts (
     closed_at TIMESTAMPTZ
 );
 
-CREATE INDEX idx_accounts_customer ON accounts(customer_id);
 CREATE INDEX idx_accounts_account_number ON accounts(account_number);
+
+-- Account owners (many-to-many between accounts and customers)
+CREATE TABLE account_owners (
+    account_id BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    customer_id BIGINT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    is_primary BOOLEAN DEFAULT false,
+    ownership_percent NUMERIC(5,2),
+    PRIMARY KEY (account_id, customer_id)
+);
+
+CREATE INDEX idx_account_owners_customer ON account_owners(customer_id);
+CREATE INDEX idx_account_owners_account ON account_owners(account_id);
 
 -- Transactions
 CREATE TABLE transactions (

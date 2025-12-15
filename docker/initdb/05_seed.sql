@@ -108,3 +108,25 @@ VALUES
 ((SELECT id FROM product_categories WHERE name='Investments'),'INV-003','Segregated Fund','Insurance-backed investment',0),
 ((SELECT id FROM product_categories WHERE name='Investments'),'INV-004','Managed Account','Advisor-managed account',0),
 ((SELECT id FROM product_categories WHERE name='Investments'),'INV-005','High Yield Note','Structured product with yield',0);
+
+-- Ensure example accounts exist (use fixed account numbers) and map owners
+INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
+SELECT 'ACCT0000001', 1, 1, 'CAD', 1000.00
+WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCT0000001');
+
+INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
+SELECT 'ACCT0000002', 1, 2, 'CAD', 500.00
+WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCT0000002');
+
+-- Map owners (idempotent)
+INSERT INTO account_owners (account_id, customer_id, is_primary)
+SELECT a.id, c.id, true
+FROM accounts a JOIN customers c ON c.email='john.doe@example.com'
+WHERE a.account_number='ACCT0000001'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO account_owners (account_id, customer_id, is_primary)
+SELECT a.id, c.id, true
+FROM accounts a JOIN customers c ON c.email='jane.roe@example.com'
+WHERE a.account_number='ACCT0000002'
+ON CONFLICT DO NOTHING;
