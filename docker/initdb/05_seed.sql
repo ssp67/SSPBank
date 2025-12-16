@@ -158,3 +158,89 @@ SELECT a.id, c.id, true
 FROM accounts a JOIN customers c ON c.email='jane.roe@example.com'
 WHERE a.account_number='ACCT0000002'
 ON CONFLICT DO NOTHING;
+
+-- Bulk sample customers and related data (idempotent)
+INSERT INTO personal_customers (first_name, last_name, dob, email, phone, country, segment_id)
+VALUES
+('Liam','Smith','1975-04-02','liam.smith@example.com','+14165550010','CA',(SELECT id FROM segments WHERE code='RETAIL')),
+('Olivia','Brown','1988-11-12','olivia.brown@example.com','+14165550011','CA',(SELECT id FROM segments WHERE code='RETAIL')),
+('Noah','Johnson','1990-01-21','noah.johnson@example.com','+16045550012','CA',(SELECT id FROM segments WHERE code='HV')),
+('Emma','Wilson','1982-06-09','emma.wilson@example.com','+16045550013','CA',(SELECT id FROM segments WHERE code='HV')),
+('Oliver','Taylor','1995-03-15','oliver.taylor@example.com','+17875550014','CA',(SELECT id FROM segments WHERE code='RETAIL')),
+('Ava','Anderson','1978-09-30','ava.anderson@example.com','+7805550015','CA',(SELECT id FROM segments WHERE code='PW')),
+('William','Thomas','1984-12-05','william.thomas@example.com','+14165550016','CA',(SELECT id FROM segments WHERE code='RETAIL')),
+('Sophia','Jackson','1992-07-22','sophia.jackson@example.com','+14035550017','CA',(SELECT id FROM segments WHERE code='HV')),
+('Benjamin','White','1987-02-10','benjamin.white@example.com','+14165550018','CA',(SELECT id FROM segments WHERE code='RETAIL')),
+('Isabella','Harris','1991-05-18','isabella.harris@example.com','+14165550019','CA',(SELECT id FROM segments WHERE code='RETAIL')),
+('Elijah','Martin','1983-08-14','elijah.martin@example.com','+14165550020','CA',(SELECT id FROM segments WHERE code='HV')),
+('Mia','Thompson','1996-10-02','mia.thompson@example.com','+14035550021','CA',(SELECT id FROM segments WHERE code='RETAIL')),
+('James','Garcia','1979-01-27','james.garcia@example.com','+14165550022','CA',(SELECT id FROM segments WHERE code='PW')),
+('Charlotte','Martinez','1986-04-11','charlotte.martinez@example.com','+16045550023','CA',(SELECT id FROM segments WHERE code='RETAIL')),
+('Lucas','Robinson','1993-09-03','lucas.robinson@example.com','+14165550024','CA',(SELECT id FROM segments WHERE code='HV')),
+('Amelia','Clark','1981-02-28','amelia.clark@example.com','+14165550025','CA',(SELECT id FROM segments WHERE code='RETAIL')),
+('Henry','Rodriguez','1976-12-19','henry.rodriguez@example.com','+14165550026','CA',(SELECT id FROM segments WHERE code='PW')),
+('Evelyn','Lewis','1994-06-06','evelyn.lewis@example.com','+17875550027','CA',(SELECT id FROM segments WHERE code='RETAIL'))
+ON CONFLICT (email) DO NOTHING;
+
+-- Addresses (per Canada Post parts)
+INSERT INTO personal_addresses (customer_id, type, civic_number, street_name, street_type, city, province, postal_code, country, effective_from)
+SELECT id, 'home', '12', 'King', 'St', 'Toronto', 'ON', 'M5H 1A1', 'CA', now()::date FROM personal_customers WHERE email='liam.smith@example.com' AND NOT EXISTS (SELECT 1 FROM personal_addresses pa WHERE pa.customer_id = personal_customers.id AND pa.postal_code='M5H 1A1');
+
+INSERT INTO personal_addresses (customer_id, type, civic_number, street_name, street_type, city, province, postal_code, country, effective_from)
+SELECT id, 'home', '34', 'Queen', 'St', 'Toronto', 'ON', 'M5V 2B6', 'CA', now()::date FROM personal_customers WHERE email='olivia.brown@example.com' AND NOT EXISTS (SELECT 1 FROM personal_addresses pa WHERE pa.customer_id = personal_customers.id AND pa.postal_code='M5V 2B6');
+
+INSERT INTO personal_addresses (customer_id, type, civic_number, street_name, street_type, city, province, postal_code, country, effective_from)
+SELECT id, 'home', '56', 'Granville', 'St', 'Vancouver', 'BC', 'V6C 1T1', 'CA', now()::date FROM personal_customers WHERE email='oliver.taylor@example.com' AND NOT EXISTS (SELECT 1 FROM personal_addresses pa WHERE pa.customer_id = personal_customers.id AND pa.postal_code='V6C 1T1');
+
+-- Identifications
+INSERT INTO personal_identifications (customer_id, id_type, id_value, issued_by, issued_at)
+SELECT id, 'SIN', '100-200-300', 'Service Canada', '2001-02-03' FROM personal_customers WHERE email='liam.smith@example.com' AND NOT EXISTS (SELECT 1 FROM personal_identifications pi WHERE pi.customer_id = personal_customers.id AND pi.id_type='SIN');
+
+INSERT INTO personal_identifications (customer_id, id_type, id_value, issued_by, issued_at)
+SELECT id, 'SIN', '200-300-400', 'Service Canada', '2002-03-04' FROM personal_customers WHERE email='olivia.brown@example.com' AND NOT EXISTS (SELECT 1 FROM personal_identifications pi WHERE pi.customer_id = personal_customers.id AND pi.id_type='SIN');
+
+-- Education & Employment (sample)
+INSERT INTO education (customer_id, institution_name, degree, field, start_date, end_date)
+SELECT id, 'McGill University', 'BA', 'Political Science', '1995-09-01', '1999-06-01' FROM personal_customers WHERE email='noah.johnson@example.com' AND NOT EXISTS (SELECT 1 FROM education e WHERE e.customer_id = personal_customers.id AND e.institution_name='McGill University');
+
+INSERT INTO employment (customer_id, employer_name, title, start_date, income)
+SELECT id, 'Maple Financial', 'Manager', '2015-06-01', 120000 FROM personal_customers WHERE email='emma.wilson@example.com' AND NOT EXISTS (SELECT 1 FROM employment em WHERE em.customer_id = personal_customers.id AND em.employer_name='Maple Financial');
+
+-- Accounts and ownerships (create accounts and map owners, including joint accounts)
+-- Individual accounts
+INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
+SELECT 'ACCT0000101', 1, 1, 'CAD', 2500.00 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCT0000101');
+
+INSERT INTO account_owners (account_id, customer_id, is_primary)
+SELECT a.id, pc.id, true FROM accounts a JOIN personal_customers pc ON pc.email='liam.smith@example.com' WHERE a.account_number='ACCT0000101' ON CONFLICT DO NOTHING;
+
+INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
+SELECT 'ACCT0000102', 1, 2, 'CAD', 5000.00 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCT0000102');
+INSERT INTO account_owners (account_id, customer_id, is_primary)
+SELECT a.id, pc.id, true FROM accounts a JOIN personal_customers pc ON pc.email='olivia.brown@example.com' WHERE a.account_number='ACCT0000102' ON CONFLICT DO NOTHING;
+
+-- Joint account between Noah and Emma
+INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
+SELECT 'ACCT0000110', 1, 1, 'CAD', 10000.00 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCT0000110');
+INSERT INTO account_owners (account_id, customer_id, is_primary)
+SELECT a.id, pc.id, (pc.email='noah.johnson@example.com')::boolean FROM accounts a JOIN personal_customers pc ON pc.email IN ('noah.johnson@example.com','emma.wilson@example.com') WHERE a.account_number='ACCT0000110' ON CONFLICT DO NOTHING;
+
+-- More accounts for others
+INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
+SELECT 'ACCT0000120', 1, 1, 'CAD', 1500.00 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCT0000120');
+INSERT INTO account_owners (account_id, customer_id, is_primary)
+SELECT a.id, pc.id, true FROM accounts a JOIN personal_customers pc ON pc.email='oliver.taylor@example.com' WHERE a.account_number='ACCT0000120' ON CONFLICT DO NOTHING;
+
+INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
+SELECT 'ACCT0000130', 1, 2, 'CAD', 8000.00 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCT0000130');
+INSERT INTO account_owners (account_id, customer_id, is_primary)
+SELECT a.id, pc.id, true FROM accounts a JOIN personal_customers pc ON pc.email='ava.anderson@example.com' WHERE a.account_number='ACCT0000130' ON CONFLICT DO NOTHING;
+
+-- Sample transactions to exercise triggers
+INSERT INTO transactions (from_account_id, to_account_id, amount, type, status, description)
+SELECT (SELECT id FROM accounts WHERE account_number='ACCT0000101'), (SELECT id FROM accounts WHERE account_number='ACCT0000102'), 200.00, 'transfer', 'posted', 'Gift' WHERE NOT EXISTS (SELECT 1 FROM transactions t WHERE t.description='Gift' AND t.amount=200.00);
+
+-- Add a few more owners mapping for joint households
+INSERT INTO account_owners (account_id, customer_id, is_primary)
+SELECT a.id, pc.id, false FROM accounts a JOIN personal_customers pc ON pc.email IN ('william.thomas@example.com','sophia.jackson@example.com') WHERE a.account_number='ACCT0000130' ON CONFLICT DO NOTHING;
+
