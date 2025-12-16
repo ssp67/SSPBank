@@ -290,3 +290,78 @@ SELECT pc.id, 'EMP0004', hr.id, b.id, '2017-05-10'
 FROM personal_customers pc JOIN hr_roles hr ON hr.code='OPS' JOIN branches b ON b.name ILIKE '%Main%' WHERE pc.email='grace.ops@ssbank.example.com'
 ON CONFLICT (employee_number) DO NOTHING;
 
+-- Bulk generation: 50 personal customers, 10 companies, accounts, joint accounts, and transactions
+WITH nums AS (SELECT generate_series(1,50) AS n),
+segments_count AS (SELECT COUNT(*) AS cnt FROM segments),
+seg_ids AS (SELECT id FROM segments ORDER BY id)
+-- 1) Personal customers
+INSERT INTO personal_customers (first_name, last_name, dob, email, phone, country, segment_id)
+SELECT
+	format('BulkFirst%02d', n),
+	format('BulkLast%02d', n),
+	(date '1970-01-01' + (n * 400) * INTERVAL '1 day')::date,
+	format('bulk.cust%03d@example.com', n),
+	format('+1416%07d', 6000000 + n),
+	'CA',
+	(SELECT id FROM segments ORDER BY id LIMIT 1 OFFSET ((n-1) % (SELECT COUNT(*) FROM segments)))
+FROM nums
+ON CONFLICT (email) DO NOTHING;
+
+-- 2) Companies (10)
+INSERT INTO companies (name, registration_number, tax_id, country)
+SELECT format('BulkCo %02d', n), format('BULK-REG-%03d', n), format('BULK-TAX-%03d', n), 'CA' FROM generate_series(1,10) n
+ON CONFLICT (registration_number) DO NOTHING;
+
+-- 3) Create one account per new personal customer
+WITH new_cust AS (
+	SELECT id, email, ROW_NUMBER() OVER (ORDER BY id) as rn FROM personal_customers WHERE email LIKE 'bulk.cust%'
+), created_acc AS (
+	INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
+	SELECT format('ACCT%07s', 300000 + rn), (SELECT id FROM branches ORDER BY id LIMIT 1), (1 + (rn % 2)), 'CAD', (round((random()*10000)::numeric,2))
+	FROM new_cust
+	ON CONFLICT (account_number) DO NOTHING
+	RETURNING id, account_number
+)
+-- Link owners
+INSERT INTO account_owners (account_id, customer_id, is_primary)
+SELECT a.id, nc.id, true
+FROM accounts a JOIN new_cust nc ON a.account_number = format('ACCT%07s', 300000 + nc.rn)
+ON CONFLICT DO NOTHING;
+
+-- 4) Create 10 joint accounts pairing sequential customers
+WITH pairs AS (
+	SELECT a1.id AS acc1, pc1.id AS c1, pc2.id AS c2, row_number() OVER () AS rn
+	FROM personal_customers pc1
+	JOIN personal_customers pc2 ON pc2.email LIKE 'bulk.cust%' AND pc2.id > pc1.id
+	JOIN accounts a1 ON a1.account_number = format('ACCT%07s', 400000 + (row_number() OVER (ORDER BY pc1.id) ))
+	WHERE pc1.email LIKE 'bulk.cust%'
+	LIMIT 10
+), created_joint AS (
+	INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
+	SELECT format('ACCT%07s', 400000 + rn), (SELECT id FROM branches ORDER BY id LIMIT 1), 1, 'CAD', 5000.00 FROM generate_series(1,10) rn
+	ON CONFLICT (account_number) DO NOTHING
+	RETURNING id, account_number
+)
+INSERT INTO account_owners (account_id, customer_id, is_primary)
+SELECT a.id, pc.id, (pc.email = (SELECT email FROM personal_customers WHERE id = (SELECT c1 FROM pairs LIMIT 1)))::boolean
+FROM accounts a JOIN personal_customers pc ON pc.email LIKE 'bulk.cust%' WHERE a.account_number LIKE 'ACCT004%'
+ON CONFLICT DO NOTHING;
+
+-- 5) Transactions batch (guarded by batch marker to avoid duplicates)
+DO $$
+BEGIN
+	IF NOT EXISTS (SELECT 1 FROM transactions WHERE description = 'BULK_SEED_BATCH_20251215') THEN
+		INSERT INTO transactions (from_account_id, to_account_id, amount, type, status, description, created_at)
+		SELECT a_from.id, a_to.id, round((random()*1000)::numeric,2), 'transfer', 'posted', 'BULK_SEED_BATCH_20251215', now() - (n || ' days')::interval
+		FROM (
+			SELECT id FROM accounts WHERE account_number LIKE 'ACCT%'
+			ORDER BY id LIMIT 100
+		) a_from
+		CROSS JOIN LATERAL (
+			SELECT id FROM accounts WHERE id <> a_from.id ORDER BY random() LIMIT 1
+		) a_to
+		CROSS JOIN generate_series(1,2) n;
+	END IF;
+END$$;
+
+

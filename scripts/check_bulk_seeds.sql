@@ -37,3 +37,9 @@ SELECT id, name, registration_number, tax_id, country FROM companies ORDER BY na
 
 -- 8) Branch address parts and transit codes
 SELECT id, name, civic_number, street_name, street_type, city, province, postal_code, branch_transit FROM branches ORDER BY name;
+
+-- 9) Bulk counts
+SELECT COUNT(*) FILTER (WHERE email LIKE 'bulk.cust%') AS bulk_customers FROM personal_customers;
+SELECT COUNT(*) FILTER (WHERE registration_number LIKE 'BULK-REG-%') AS bulk_companies FROM companies;
+SELECT COUNT(*) FILTER (WHERE account_number LIKE 'ACCT003%') AS bulk_customer_accounts FROM accounts;
+SELECT COUNT(*) FILTER (WHERE description='BULK_SEED_BATCH_20251215') AS bulk_transactions FROM transactions;
