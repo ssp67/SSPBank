@@ -262,3 +262,31 @@ SELECT (SELECT id FROM accounts WHERE account_number='ACCT0000101'), (SELECT id 
 INSERT INTO account_owners (account_id, customer_id, is_primary)
 SELECT a.id, pc.id, false FROM accounts a JOIN personal_customers pc ON pc.email IN ('william.thomas@example.com','sophia.jackson@example.com') WHERE a.account_number='ACCT0000130' ON CONFLICT DO NOTHING;
 
+-- Seed companies for non-personal customers
+INSERT INTO companies (name, registration_number, tax_id, country)
+VALUES
+('Harbour Logistics','HL-REG-100','TAX-HL-100','CA'),
+('Greenfields Farming Ltd','GF-REG-200','TAX-GF-200','CA')
+ON CONFLICT (registration_number) DO NOTHING;
+
+-- Ensure branches have Canadian address parts and a transit code (idempotent)
+UPDATE branches SET civic_number='200', street_name='King', street_type='St', city='Toronto', province='ON', postal_code='M5H 4E1', branch_transit='20001' WHERE branch_transit IS NULL OR branch_transit='';
+
+-- Seed employees as personal_customers if not present and ensure employees table has entries
+INSERT INTO personal_customers (first_name, last_name, dob, email, phone, country, segment_id)
+VALUES
+('Ethan','Branch','1990-03-03','ethan.branch@ssbank.example.com','+14165550997','CA',(SELECT id FROM segments WHERE code='RETAIL')),
+('Grace','Ops','1985-07-07','grace.ops@ssbank.example.com','+14165550996','CA',(SELECT id FROM segments WHERE code='RETAIL'))
+ON CONFLICT (email) DO NOTHING;
+
+-- Create employee rows linked to those personal_customers
+INSERT INTO employees (personal_customer_id, employee_number, hr_role_id, branch_id, hired_at)
+SELECT pc.id, 'EMP0003', hr.id, b.id, '2019-01-15'
+FROM personal_customers pc JOIN hr_roles hr ON hr.code='TELLER' JOIN branches b ON b.name ILIKE '%Main%' WHERE pc.email='ethan.branch@ssbank.example.com'
+ON CONFLICT (employee_number) DO NOTHING;
+
+INSERT INTO employees (personal_customer_id, employee_number, hr_role_id, branch_id, hired_at)
+SELECT pc.id, 'EMP0004', hr.id, b.id, '2017-05-10'
+FROM personal_customers pc JOIN hr_roles hr ON hr.code='OPS' JOIN branches b ON b.name ILIKE '%Main%' WHERE pc.email='grace.ops@ssbank.example.com'
+ON CONFLICT (employee_number) DO NOTHING;
+

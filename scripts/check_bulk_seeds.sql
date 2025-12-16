@@ -22,3 +22,18 @@ ORDER BY a.account_number;
 
 -- 5) Recent transactions (sample)
 SELECT id, amount, type, status, description, created_at FROM transactions ORDER BY created_at DESC LIMIT 20;
+
+-- 6) HR roles and employees
+SELECT code, name, description FROM hr_roles ORDER BY code;
+
+SELECT e.employee_number, pc.email AS employee_email, hr.code AS role_code, e.hired_at, e.active
+FROM employees e
+LEFT JOIN personal_customers pc ON pc.id = e.personal_customer_id
+LEFT JOIN hr_roles hr ON hr.id = e.hr_role_id
+ORDER BY e.employee_number LIMIT 50;
+
+-- 7) Companies (non-personal customers)
+SELECT id, name, registration_number, tax_id, country FROM companies ORDER BY name;
+
+-- 8) Branch address parts and transit codes
+SELECT id, name, civic_number, street_name, street_type, city, province, postal_code, branch_transit FROM branches ORDER BY name;
