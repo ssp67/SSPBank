@@ -6,10 +6,38 @@ INSERT INTO branches (name, address, city, state, zip, country) VALUES ('Main Br
 -- Employee
 INSERT INTO employees (branch_id, first_name, last_name, role, email) VALUES (1,'Alice','Smith','teller','alice.smith@example.com');
 
--- Customers
-INSERT INTO customers (first_name, last_name, dob, email, phone, address) VALUES
-('John','Doe','1980-02-15','john.doe@example.com','+15551234','456 Elm St'),
-('Jane','Roe','1990-07-20','jane.roe@example.com','+15559876','789 Oak Ave');
+-- Segments
+INSERT INTO segments (code, name, description) VALUES
+('RETAIL','Retail','Standard retail customers'),
+('HV','HighValue','High value customers'),
+('PW','PrivateWealth','Private wealth customers')
+ON CONFLICT DO NOTHING;
+
+-- Personal customers
+INSERT INTO personal_customers (first_name, last_name, dob, email, phone, country, segment_id) VALUES
+('John','Doe','1980-02-15','john.doe@example.com','+15551234','CA',(SELECT id FROM segments WHERE code='RETAIL')),
+('Jane','Roe','1990-07-20','jane.roe@example.com','+15559876','CA',(SELECT id FROM segments WHERE code='HV'));
+
+-- Addresses
+INSERT INTO personal_addresses (customer_id, type, civic_number, street_name, street_type, city, province, postal_code, country, effective_from)
+SELECT id, 'home', '456', 'Elm', 'St', 'Toronto', 'ON', 'M5V 3K1', 'CA', now()::date FROM personal_customers WHERE email='john.doe@example.com';
+
+INSERT INTO personal_addresses (customer_id, type, civic_number, street_name, street_type, city, province, postal_code, country, effective_from)
+SELECT id, 'home', '789', 'Oak', 'Ave', 'Vancouver', 'BC', 'V6B 1A1', 'CA', now()::date FROM personal_customers WHERE email='jane.roe@example.com';
+
+-- Identifications
+INSERT INTO personal_identifications (customer_id, id_type, id_value, issued_by, issued_at)
+SELECT id, 'SIN', '123-456-789', 'Service Canada', '2000-01-01' FROM personal_customers WHERE email='john.doe@example.com';
+
+INSERT INTO personal_identifications (customer_id, id_type, id_value, issued_by, issued_at)
+SELECT id, 'SIN', '987-654-321', 'Service Canada', '2005-05-05' FROM personal_customers WHERE email='jane.roe@example.com';
+
+-- Education and employment
+INSERT INTO education (customer_id, institution_name, degree, field, start_date, end_date)
+SELECT id, 'University of Toronto', 'BSc', 'Economics', '1998-09-01', '2002-06-01' FROM personal_customers WHERE email='john.doe@example.com';
+
+INSERT INTO employment (customer_id, employer_name, title, start_date, income)
+SELECT id, 'Acme Corp', 'Analyst', '2010-01-01', 85000 FROM personal_customers WHERE email='john.doe@example.com';
 
 -- Accounts
 INSERT INTO accounts (account_number, customer_id, branch_id, type_id, currency, balance) VALUES

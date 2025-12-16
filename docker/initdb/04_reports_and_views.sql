@@ -6,8 +6,9 @@ FROM accounts a;
 
 CREATE VIEW view_customer_balances AS
 SELECT c.id AS customer_id, c.first_name, c.last_name, SUM(a.balance) as total_balance
-FROM customers c
-LEFT JOIN accounts a ON a.customer_id = c.id
+FROM personal_customers c
+LEFT JOIN account_owners ao ON ao.customer_id = c.id
+LEFT JOIN accounts a ON a.id = ao.account_id
 GROUP BY c.id, c.first_name, c.last_name;
 
 CREATE VIEW view_recent_transactions AS

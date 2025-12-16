@@ -4,20 +4,79 @@
 -- Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Customers
-CREATE TABLE customers (
+-- Personal customers (renamed from `customers`)
+CREATE TABLE personal_customers (
     id BIGSERIAL PRIMARY KEY,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
     dob DATE,
     email TEXT UNIQUE,
     phone TEXT,
-    address TEXT,
-    province CHAR(2),
-    postal_code TEXT,
     country TEXT DEFAULT 'CA',
+    segment_id SMALLINT REFERENCES segments(id),
     created_at TIMESTAMPTZ DEFAULT now(),
     status TEXT DEFAULT 'active'
+);
+
+-- Customer segments (retail, high-value, private-wealth, etc.)
+CREATE TABLE segments (
+    id SMALLSERIAL PRIMARY KEY,
+    code TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT
+);
+
+-- Customer identifications
+CREATE TABLE personal_identifications (
+    id BIGSERIAL PRIMARY KEY,
+    customer_id BIGINT NOT NULL REFERENCES personal_customers(id) ON DELETE CASCADE,
+    id_type TEXT NOT NULL,
+    id_value TEXT NOT NULL,
+    issued_by TEXT,
+    issued_at DATE,
+    expires_at DATE,
+    metadata JSONB
+);
+
+-- Customer addresses (breakdown per Canada Post)
+CREATE TABLE personal_addresses (
+    id BIGSERIAL PRIMARY KEY,
+    customer_id BIGINT NOT NULL REFERENCES personal_customers(id) ON DELETE CASCADE,
+    type TEXT NOT NULL, -- home, work, other
+    unit TEXT,
+    civic_number TEXT,
+    street_name TEXT,
+    street_type TEXT,
+    city TEXT,
+    province CHAR(2) REFERENCES provinces(code),
+    postal_code TEXT,
+    country TEXT DEFAULT 'CA',
+    effective_from DATE,
+    effective_to DATE
+);
+
+-- Education history
+CREATE TABLE education (
+    id BIGSERIAL PRIMARY KEY,
+    customer_id BIGINT NOT NULL REFERENCES personal_customers(id) ON DELETE CASCADE,
+    institution_name TEXT NOT NULL,
+    degree TEXT,
+    field TEXT,
+    start_date DATE,
+    end_date DATE,
+    notes TEXT
+);
+
+-- Employment history
+CREATE TABLE employment (
+    id BIGSERIAL PRIMARY KEY,
+    customer_id BIGINT NOT NULL REFERENCES personal_customers(id) ON DELETE CASCADE,
+    employer_name TEXT NOT NULL,
+    title TEXT,
+    start_date DATE,
+    end_date DATE,
+    income NUMERIC(18,2),
+    notes TEXT
 );
 
 -- Branches
@@ -84,7 +143,7 @@ CREATE INDEX idx_accounts_account_number ON accounts(account_number);
 -- Account owners (many-to-many between accounts and customers)
 CREATE TABLE account_owners (
     account_id BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-    customer_id BIGINT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    customer_id BIGINT NOT NULL REFERENCES personal_customers(id) ON DELETE CASCADE,
     is_primary BOOLEAN DEFAULT false,
     ownership_percent NUMERIC(5,2),
     PRIMARY KEY (account_id, customer_id)
@@ -106,7 +165,7 @@ CREATE TABLE transactions (
     description TEXT,
     metadata JSONB,
     initiated_by_employee_id BIGINT REFERENCES employees(id),
-    initiated_by_customer_id BIGINT REFERENCES customers(id),
+    initiated_by_customer_id BIGINT REFERENCES personal_customers(id),
     created_at TIMESTAMPTZ DEFAULT now(),
     posted_at TIMESTAMPTZ,
     from_balance_before NUMERIC(18,2),

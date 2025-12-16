@@ -3,17 +3,79 @@
 -- Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Customers
-CREATE TABLE customers (
+-- Personal customers (renamed from `customers`)
+CREATE TABLE personal_customers (
     id BIGSERIAL PRIMARY KEY,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
     dob DATE,
     email TEXT UNIQUE,
     phone TEXT,
-    address TEXT,
+    country TEXT DEFAULT 'CA',
+    segment_id SMALLINT REFERENCES segments(id),
     created_at TIMESTAMPTZ DEFAULT now(),
     status TEXT DEFAULT 'active'
+);
+
+-- Customer segments
+CREATE TABLE segments (
+    id SMALLSERIAL PRIMARY KEY,
+    code TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT
+);
+
+-- Customer identifications
+CREATE TABLE personal_identifications (
+    id BIGSERIAL PRIMARY KEY,
+    customer_id BIGINT NOT NULL REFERENCES personal_customers(id) ON DELETE CASCADE,
+    id_type TEXT NOT NULL,
+    id_value TEXT NOT NULL,
+    issued_by TEXT,
+    issued_at DATE,
+    expires_at DATE,
+    metadata JSONB
+);
+
+-- Customer addresses
+CREATE TABLE personal_addresses (
+    id BIGSERIAL PRIMARY KEY,
+    customer_id BIGINT NOT NULL REFERENCES personal_customers(id) ON DELETE CASCADE,
+    type TEXT NOT NULL,
+    unit TEXT,
+    civic_number TEXT,
+    street_name TEXT,
+    street_type TEXT,
+    city TEXT,
+    province CHAR(2) REFERENCES provinces(code),
+    postal_code TEXT,
+    country TEXT DEFAULT 'CA',
+    effective_from DATE,
+    effective_to DATE
+);
+
+-- Education history
+CREATE TABLE education (
+    id BIGSERIAL PRIMARY KEY,
+    customer_id BIGINT NOT NULL REFERENCES personal_customers(id) ON DELETE CASCADE,
+    institution_name TEXT NOT NULL,
+    degree TEXT,
+    field TEXT,
+    start_date DATE,
+    end_date DATE,
+    notes TEXT
+);
+
+-- Employment history
+CREATE TABLE employment (
+    id BIGSERIAL PRIMARY KEY,
+    customer_id BIGINT NOT NULL REFERENCES personal_customers(id) ON DELETE CASCADE,
+    employer_name TEXT NOT NULL,
+    title TEXT,
+    start_date DATE,
+    end_date DATE,
+    income NUMERIC(18,2),
+    notes TEXT
 );
 
 -- Branches

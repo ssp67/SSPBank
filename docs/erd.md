@@ -2,12 +2,14 @@
 
 ```mermaid
 erDiagram
-    CUSTOMERS {
+    PERSONAL_CUSTOMERS {
         BIGSERIAL id PK
         TEXT first_name
         TEXT last_name
         DATE dob
         TEXT email
+        TEXT phone
+        SMALLINT segment_id FK
     }
 
     BRANCHES {
@@ -126,5 +128,6 @@ erDiagram
 ```
 
 Notes:
+
 - Render this with a Mermaid-capable renderer (e.g., VS Code Mermaid Preview or GitHub Markdown).
 - The diagram shows primary keys (PK) and foreign keys (FK) and cardinality hints.
