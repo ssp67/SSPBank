@@ -78,6 +78,16 @@ CREATE TABLE employment (
     notes TEXT
 );
 
+-- Companies (business customers)
+CREATE TABLE IF NOT EXISTS companies (
+    id BIGSERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    registration_number TEXT UNIQUE,
+    tax_id TEXT,
+    country TEXT DEFAULT 'CA',
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- Branches
 CREATE TABLE branches (
     id BIGSERIAL PRIMARY KEY,
@@ -132,7 +142,7 @@ CREATE INDEX idx_accounts_account_number ON accounts(account_number);
 -- Account owners (many-to-many between accounts and customers)
 CREATE TABLE account_owners (
     account_id BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-    customer_id BIGINT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    customer_id BIGINT NOT NULL REFERENCES personal_customers(id) ON DELETE CASCADE,
     is_primary BOOLEAN DEFAULT false,
     ownership_percent NUMERIC(5,2),
     PRIMARY KEY (account_id, customer_id)
@@ -154,7 +164,7 @@ CREATE TABLE transactions (
     description TEXT,
     metadata JSONB,
     initiated_by_employee_id BIGINT REFERENCES employees(id),
-    initiated_by_customer_id BIGINT REFERENCES customers(id),
+    initiated_by_customer_id BIGINT REFERENCES personal_customers(id),
     created_at TIMESTAMPTZ DEFAULT now(),
     posted_at TIMESTAMPTZ,
     from_balance_before NUMERIC(18,2),

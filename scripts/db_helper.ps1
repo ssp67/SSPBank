@@ -10,8 +10,8 @@ Usage:
 #>
 
 param(
-    [Parameter(Position=0, Mandatory=$true)]
-    [ValidateSet('start','stop','restart','logs','verify','seed')]
+    [Parameter(Position = 0, Mandatory = $true)]
+    [ValidateSet('start', 'stop', 'restart', 'logs', 'verify', 'seed')]
     [string]$Action
 )
 
@@ -28,11 +28,12 @@ function Start-Db {
     docker compose up -d
     Write-Host "Waiting for Postgres to accept connections..."
     $max = 60
-    for ($i=0;$i -lt $max;$i++) {
+    for ($i = 0; $i -lt $max; $i++) {
         try {
             docker exec pg-bank pg_isready -U $env:POSTGRES_USER -d $env:POSTGRES_DB | Out-Null
             if ($LASTEXITCODE -eq 0) { Write-Host "Postgres is ready."; return }
-        } catch { }
+        }
+        catch { }
         Start-Sleep -Seconds 2
     }
     Write-Error "Postgres did not become ready in time. Check container logs with '.\scripts\db_helper.ps1 logs'."
@@ -53,7 +54,7 @@ function Verify-Db {
     Ensure-DockerAvailable
     Write-Host "Running basic verification queries..."
     docker exec -i pg-bank psql -U $env:POSTGRES_USER -d $env:POSTGRES_DB -c "SELECT current_database(), version();"
-    docker exec -i pg-bank psql -U $env:POSTGRES_USER -d $env:POSTGRES_DB -c "SELECT count(*) FROM customers;"
+    docker exec -i pg-bank psql -U $env:POSTGRES_USER -d $env:POSTGRES_DB -c "SELECT count(*) FROM personal_customers;"
     docker exec -i pg-bank psql -U $env:POSTGRES_USER -d $env:POSTGRES_DB -c "SELECT * FROM view_customer_balances LIMIT 10;"
     docker exec -i pg-bank psql -U $env:POSTGRES_USER -d $env:POSTGRES_DB -c "SELECT * FROM view_recent_transactions LIMIT 10;"
 }

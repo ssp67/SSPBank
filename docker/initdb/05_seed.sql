@@ -149,13 +149,13 @@ WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCT0000002');
 -- Map owners (idempotent)
 INSERT INTO account_owners (account_id, customer_id, is_primary)
 SELECT a.id, c.id, true
-FROM accounts a JOIN customers c ON c.email='john.doe@example.com'
+FROM accounts a JOIN personal_customers c ON c.email='john.doe@example.com'
 WHERE a.account_number='ACCT0000001'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO account_owners (account_id, customer_id, is_primary)
 SELECT a.id, c.id, true
-FROM accounts a JOIN customers c ON c.email='jane.roe@example.com'
+FROM accounts a JOIN personal_customers c ON c.email='jane.roe@example.com'
 WHERE a.account_number='ACCT0000002'
 ON CONFLICT DO NOTHING;
 
