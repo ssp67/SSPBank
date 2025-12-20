@@ -3,6 +3,14 @@
 -- Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Customer segments
+CREATE TABLE segments (
+    id SMALLSERIAL PRIMARY KEY,
+    code TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT
+);
+
 -- Personal customers (renamed from `customers`)
 CREATE TABLE personal_customers (
     id BIGSERIAL PRIMARY KEY,
@@ -17,14 +25,6 @@ CREATE TABLE personal_customers (
     status TEXT DEFAULT 'active'
 );
 
--- Customer segments
-CREATE TABLE segments (
-    id SMALLSERIAL PRIMARY KEY,
-    code TEXT UNIQUE NOT NULL,
-    name TEXT NOT NULL,
-    description TEXT
-);
-
 -- Customer identifications
 CREATE TABLE personal_identifications (
     id BIGSERIAL PRIMARY KEY,
@@ -36,6 +36,16 @@ CREATE TABLE personal_identifications (
     expires_at DATE,
     metadata JSONB
 );
+
+-- Provinces (Canadian provinces/territories)
+CREATE TABLE provinces (
+    code CHAR(2) PRIMARY KEY,
+    name TEXT NOT NULL
+);
+
+INSERT INTO provinces (code, name) VALUES
+('AB','Alberta'),('BC','British Columbia'),('MB','Manitoba'),('NB','New Brunswick'),('NL','Newfoundland and Labrador'),('NS','Nova Scotia'),('ON','Ontario'),('PE','Prince Edward Island'),('QC','Quebec'),('SK','Saskatchewan'),('NT','Northwest Territories'),('NU','Nunavut'),('YT','Yukon')
+ON CONFLICT DO NOTHING;
 
 -- Customer addresses
 CREATE TABLE personal_addresses (

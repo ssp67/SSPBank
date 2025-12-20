@@ -1,7 +1,7 @@
 -- Reporting views and helper functions
 
 CREATE VIEW view_account_balances AS
-SELECT a.id, a.account_number, a.customer_id, a.balance, a.currency, a.status, a.opened_at
+SELECT a.id, a.account_number, a.balance, a.currency, a.status, a.opened_at
 FROM accounts a;
 
 CREATE VIEW view_customer_balances AS

@@ -61,7 +61,7 @@ $$ LANGUAGE plpgsql;
 -- Attach audit triggers to core tables
 DO $$
 BEGIN
-  EXECUTE 'CREATE TRIGGER audit_customers AFTER INSERT OR UPDATE OR DELETE ON customers FOR EACH ROW EXECUTE FUNCTION audit_log_trigger();';
+  EXECUTE 'CREATE TRIGGER audit_customers AFTER INSERT OR UPDATE OR DELETE ON personal_customers FOR EACH ROW EXECUTE FUNCTION audit_log_trigger();';
   EXECUTE 'CREATE TRIGGER audit_accounts AFTER INSERT OR UPDATE OR DELETE ON accounts FOR EACH ROW EXECUTE FUNCTION audit_log_trigger();';
   EXECUTE 'CREATE TRIGGER audit_transactions AFTER INSERT OR UPDATE OR DELETE ON transactions FOR EACH ROW EXECUTE FUNCTION audit_log_trigger();';
   EXECUTE 'CREATE TRIGGER audit_cards AFTER INSERT OR UPDATE OR DELETE ON cards FOR EACH ROW EXECUTE FUNCTION audit_log_trigger();';
