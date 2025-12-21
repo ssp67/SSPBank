@@ -33,7 +33,7 @@ Write-Host "Selected from: $fromAcct (id=$fromId, bal=$fromBalBefore) -> to: $to
 $ts = (Get-Date).ToString('yyyyMMddHHmmss')
 $rand = Get-Random -Maximum 9999
 $desc = "TEST_TX_${ts}_${rand}"
-$descEsc = $desc -replace "'","''"
+$descEsc = $desc -replace "'", "''"
 
 # Insert test transaction with status 'posted'
 $insSql = "INSERT INTO transactions (from_account_id,to_account_id,amount,type,status,description,initiated_by_customer_id) VALUES ($fromId,$toId,$Amount,'transfer','posted','$descEsc',(SELECT customer_id FROM account_owners WHERE account_id=$fromId AND is_primary=true LIMIT 1)) RETURNING id;"
@@ -59,17 +59,19 @@ $fromBalAfter = [decimal]$fa[2]; $toBalAfter = [decimal]$fb[2]
 if ($fromBalAfter -ne ($fromBalBefore - $Amount)) {
     Write-Error "From-account balance did not decrease as expected: before=$fromBalBefore after=$fromBalAfter expected=$(($fromBalBefore - $Amount))"
     $status = 'FAIL'
-} elseif ($toBalAfter -ne ($toBalBefore + $Amount)) {
+}
+elseif ($toBalAfter -ne ($toBalBefore + $Amount)) {
     Write-Error "To-account balance did not increase as expected: before=$toBalBefore after=$toBalAfter expected=$(($toBalBefore + $Amount))"
     $status = 'FAIL'
-} else {
+}
+else {
     Write-Host "Balances updated OK: $fromAcct $fromBalBefore->$fromBalAfter, $toAcct $toBalBefore->$toBalAfter"
     $status = 'OK'
 }
 
 # Create reversal transaction to restore balances
 $revDesc = "REVERSAL_$txId"
-$revDescEsc = $revDesc -replace "'","''"
+$revDescEsc = $revDesc -replace "'", "''"
 $revIns = ExecSql("INSERT INTO transactions (from_account_id,to_account_id,amount,type,status,description,initiated_by_customer_id) VALUES ($toId,$fromId,$Amount,'reversal','posted','$revDescEsc',(SELECT customer_id FROM account_owners WHERE account_id=$toId AND is_primary=true LIMIT 1)) RETURNING id;") | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^[0-9]+' }
 if (-not $revIns) {
     Write-Warning "Failed to insert reversal transaction; manual cleanup may be required."

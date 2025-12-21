@@ -66,19 +66,22 @@ function Verify-Db {
     $exists = docker exec -i pg-bank psql -U $User -d $DB -t -A -c "SELECT to_regclass('public.personal_customers');"
     if ([string]::IsNullOrEmpty($exists)) {
         Write-Warning "Table 'personal_customers' not found"
-    } else {
+    }
+    else {
         docker exec -i pg-bank psql -U $User -d $DB -c "SELECT count(*) FROM personal_customers;"
     }
 
     $v1 = docker exec -i pg-bank psql -U $User -d $DB -t -A -c "SELECT to_regclass('public.view_customer_balances');"
     if (-not [string]::IsNullOrEmpty($v1)) {
         docker exec -i pg-bank psql -U $User -d $DB -c "SELECT * FROM view_customer_balances LIMIT 10;"
-    } else { Write-Warning "View 'view_customer_balances' not found" }
+    }
+    else { Write-Warning "View 'view_customer_balances' not found" }
 
     $v2 = docker exec -i pg-bank psql -U $User -d $DB -t -A -c "SELECT to_regclass('public.view_recent_transactions');"
     if (-not [string]::IsNullOrEmpty($v2)) {
         docker exec -i pg-bank psql -U $User -d $DB -c "SELECT * FROM view_recent_transactions LIMIT 10;"
-    } else { Write-Warning "View 'view_recent_transactions' not found" }
+    }
+    else { Write-Warning "View 'view_recent_transactions' not found" }
 }
 
 function Seed-Db {
