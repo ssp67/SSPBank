@@ -11,7 +11,12 @@ BEGIN
   END IF;
 
   IF NEW.from_account_id IS NOT NULL THEN
-    SELECT balance, COALESCE(overdraft_limit,0) INTO from_bal, od_limit FROM accounts WHERE id = NEW.from_account_id FOR UPDATE;
+    SELECT a.balance, COALESCE(ba.overdraft_limit,0)
+    INTO from_bal, od_limit
+    FROM accounts a
+    LEFT JOIN bank_accounts ba ON ba.account_id = a.id
+    WHERE a.id = NEW.from_account_id
+    FOR UPDATE;
     IF from_bal - NEW.amount < -od_limit THEN
       RAISE EXCEPTION 'insufficient_funds: account %', NEW.from_account_id;
     END IF;
@@ -51,7 +56,11 @@ BEGIN
     who,
     TG_OP,
     TG_TABLE_NAME,
-    COALESCE( (CASE WHEN TG_OP = 'DELETE' THEN OLD.id::text ELSE NEW.id::text END), '' ),
+    COALESCE(
+      (payload->>'id'),
+      (payload->>'account_id'),
+      ''
+    ),
     payload
   );
   RETURN NULL;

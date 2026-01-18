@@ -1,7 +1,8 @@
 -- Seed data applied at DB bootstrap
 
 -- Branch
-INSERT INTO branches (name, address, city, state, zip, country) VALUES ('Main Branch','123 Main St','Metropolis','NY','10001','US');
+INSERT INTO branches (name, address, city, province, postal_code, country)
+VALUES ('Main Branch','123 Main St','Toronto','ON','M5H 4E1','CA');
 
 -- Employee
 INSERT INTO employees (branch_id, first_name, last_name, role, email) VALUES (1,'Alice','Smith','teller','alice.smith@example.com');
@@ -17,6 +18,12 @@ ON CONFLICT DO NOTHING;
 INSERT INTO personal_customers (first_name, last_name, dob, email, phone, country, segment_id) VALUES
 ('John','Doe','1980-02-15','john.doe@example.com','+15551234','CA',(SELECT id FROM segments WHERE code='RETAIL')),
 ('Jane','Roe','1990-07-20','jane.roe@example.com','+15559876','CA',(SELECT id FROM segments WHERE code='HV'));
+
+INSERT INTO parties (party_type, personal_customer_id)
+SELECT 'personal', id
+FROM personal_customers
+WHERE email IN ('john.doe@example.com','jane.roe@example.com')
+ON CONFLICT DO NOTHING;
 
 -- Addresses
 INSERT INTO personal_addresses (customer_id, type, civic_number, street_name, street_type, city, province, postal_code, country, effective_from)
@@ -40,29 +47,171 @@ INSERT INTO employment (customer_id, employer_name, title, start_date, income)
 SELECT id, 'Acme Corp', 'Analyst', '2010-01-01', 85000 FROM personal_customers WHERE email='john.doe@example.com';
 
 -- Accounts
-INSERT INTO accounts (account_number, customer_id, branch_id, type_id, currency, balance) VALUES
-(NULL, 1, 1, 1, 'USD', 1000.00),
-(NULL, 2, 1, 2, 'USD', 500.00);
+INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
+VALUES
+('ACCT0000001', 1, 'CHEQUING', 'CAD', 1000.00),
+('ACCT0000002', 1, 'SAVINGS', 'CAD', 500.00)
+ON CONFLICT (account_number) DO NOTHING;
+
+INSERT INTO bank_accounts (account_id, bank_account_type)
+SELECT id, CASE WHEN type_id = 'CHEQUING' THEN 'chequing' ELSE 'savings' END
+FROM accounts
+WHERE account_number IN ('ACCT0000001','ACCT0000002')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO party_account_reln (party_id, account_id, role, ownership_percent)
+SELECT p.id, a.id, 'owner', 100
+FROM accounts a
+JOIN personal_customers c ON c.email IN ('john.doe@example.com','jane.roe@example.com')
+JOIN parties p ON p.personal_customer_id = c.id
+WHERE (a.account_number = 'ACCT0000001' AND c.email = 'john.doe@example.com')
+   OR (a.account_number = 'ACCT0000002' AND c.email = 'jane.roe@example.com')
+ON CONFLICT DO NOTHING;
+
+-- Mortgage account for John
+INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
+SELECT 'ACCTM00001', 1, 'MORTGAGE', 'CAD', 250000.00
+WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCTM00001');
+
+INSERT INTO mortgages (account_id, principal, interest_rate, start_date, end_date, status)
+SELECT id, 250000.00, 0.0399, '2020-01-01', '2045-01-01', 'active'
+FROM accounts
+WHERE account_number='ACCTM00001'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO party_account_reln (party_id, account_id, role, ownership_percent)
+SELECT p.id, a.id, 'owner', 100
+FROM accounts a
+JOIN personal_customers c ON c.email='john.doe@example.com'
+JOIN parties p ON p.personal_customer_id = c.id
+WHERE a.account_number='ACCTM00001'
+ON CONFLICT DO NOTHING;
+
+-- PLC account for Jane
+INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
+SELECT 'ACCTP00001', 1, 'PLC', 'CAD', 0.00
+WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCTP00001');
+
+INSERT INTO plc_accounts (account_id, credit_limit, interest_rate, status)
+SELECT id, 15000.00, 0.0799, 'active'
+FROM accounts
+WHERE account_number='ACCTP00001'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO party_account_reln (party_id, account_id, role, ownership_percent)
+SELECT p.id, a.id, 'owner', 100
+FROM accounts a
+JOIN personal_customers c ON c.email='jane.roe@example.com'
+JOIN parties p ON p.personal_customer_id = c.id
+WHERE a.account_number='ACCTP00001'
+ON CONFLICT DO NOTHING;
+
+-- Investment accounts and holdings
+INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
+SELECT 'ACCTI00001', 1, 'INVESTMENT', 'CAD', 20000.00
+WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCTI00001');
+
+INSERT INTO investment_accounts (account_id, registration_type, name, created_at)
+SELECT id, 'RRSP', 'John Doe RRSP', now()
+FROM accounts
+WHERE account_number='ACCTI00001'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO party_account_reln (party_id, account_id, role, ownership_percent)
+SELECT p.id, a.id, 'owner', 100
+FROM accounts a
+JOIN personal_customers c ON c.email='john.doe@example.com'
+JOIN parties p ON p.personal_customer_id = c.id
+WHERE a.account_number='ACCTI00001'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO gic_inv (investment_account_id, principal, interest_rate, term_months, maturity_date)
+SELECT a.id, 5000.00, 0.0350, 12, '2026-01-01'
+FROM accounts a
+WHERE a.account_number='ACCTI00001'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO mutual_fund_inv (investment_account_id, fund_name, units, nav, currency)
+SELECT a.id, 'Global Equity Fund', 120.000000, 22.50, 'CAD'
+FROM accounts a
+WHERE a.account_number='ACCTI00001'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO equity_inv (investment_account_id, symbol, shares, avg_price, currency)
+SELECT a.id, 'RY', 50.000000, 98.25, 'CAD'
+FROM accounts a
+WHERE a.account_number='ACCTI00001'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO investment_savings_inv (investment_account_id, balance, interest_rate, currency)
+SELECT a.id, 3000.00, 0.0150, 'CAD'
+FROM accounts a
+WHERE a.account_number='ACCTI00001'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
+SELECT 'ACCTI00002', 1, 'INVESTMENT', 'CAD', 12000.00
+WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCTI00002');
+
+INSERT INTO investment_accounts (account_id, registration_type, name, created_at)
+SELECT id, 'TFSA', 'Jane Roe TFSA', now()
+FROM accounts
+WHERE account_number='ACCTI00002'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO party_account_reln (party_id, account_id, role, ownership_percent)
+SELECT p.id, a.id, 'owner', 100
+FROM accounts a
+JOIN personal_customers c ON c.email='jane.roe@example.com'
+JOIN parties p ON p.personal_customer_id = c.id
+WHERE a.account_number='ACCTI00002'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO equity_inv (investment_account_id, symbol, shares, avg_price, currency)
+SELECT a.id, 'SHOP', 10.000000, 62.10, 'CAD'
+FROM accounts a
+WHERE a.account_number='ACCTI00002'
+ON CONFLICT DO NOTHING;
 
 -- Transactions
-INSERT INTO transactions (to_account_id, amount, type, status, description, initiated_by_customer_id) VALUES (1, 250.00, 'deposit', 'posted', 'ATM deposit', 1);
-INSERT INTO transactions (from_account_id, to_account_id, amount, type, status, description, initiated_by_customer_id) VALUES (1, 2, 120.00, 'transfer', 'posted', 'Rent payment', 1);
+INSERT INTO transactions (to_account_id, amount, type, status, description, initiated_by_customer_id)
+SELECT a.id, 250.00, 'deposit', 'posted', 'ATM deposit', c.id
+FROM accounts a
+JOIN personal_customers c ON c.email = 'john.doe@example.com'
+WHERE a.account_number = 'ACCT0000001';
+
+INSERT INTO transactions (from_account_id, to_account_id, amount, type, status, description, initiated_by_customer_id)
+SELECT a_from.id, a_to.id, 120.00, 'transfer', 'posted', 'Rent payment', c.id
+FROM accounts a_from
+JOIN accounts a_to ON a_to.account_number = 'ACCT0000002'
+JOIN personal_customers c ON c.email = 'john.doe@example.com'
+WHERE a_from.account_number = 'ACCT0000001';
 
 -- Cards
-INSERT INTO cards (card_number, account_id, card_type, expiry_date) VALUES ('4111-1111-1111-1111', 1, 'debit', '2028-12-31');
-INSERT INTO card_transactions (card_id, merchant, amount, currency, status) VALUES (1, 'Coffee Shop', 4.50, 'USD', 'settled');
+INSERT INTO cards (card_number, account_id, card_type, interest_rate, expiry_date)
+SELECT '4111-1111-1111-1111', a.id, 'debit', 0.0000, '2028-12-31'
+FROM accounts a
+WHERE a.account_number = 'ACCT0000001'
+ON CONFLICT (account_id) DO NOTHING;
+
+INSERT INTO card_transactions (card_id, merchant, amount, currency, status)
+SELECT a.id, 'Coffee Shop', 4.50, 'USD', 'settled'
+FROM accounts a
+WHERE a.account_number = 'ACCT0000001';
 
 -- Product catalogue seed
-INSERT INTO product_categories (name, description) VALUES
-('Credit Cards','Personal and business credit card products'),
-('Bank Accounts','Checking and savings accounts'),
-('GIC','Guaranteed Investment Certificates'),
-('Mutual Funds','Mutual fund investment products'),
-('Loans','Personal and unsecured loans'),
-('PLC','Personal Line of Credit'),
-('Mortgages','Residential mortgage products'),
-('Insurance','Life and property insurance products'),
-('Investments','Other investment products');
+INSERT INTO product_categories (id, name, description) VALUES
+('CREDIT_CARDS','Credit Cards','Personal and business credit card products'),
+('CHEQUING','Chequing','Chequing accounts'),
+('SAVINGS','Savings','Savings accounts'),
+('GIC','GIC','Guaranteed Investment Certificates'),
+('MUTUAL_FUNDS','Mutual Funds','Mutual fund investment products'),
+('LOANS','Loans','Personal and unsecured loans'),
+('PLC','PLC','Personal Line of Credit'),
+('MORTGAGES','Mortgages','Residential mortgage products'),
+('INSURANCE','Insurance','Life and property insurance products'),
+('EQUITY','Equity','Equity investment products'),
+('INVESTMENT_SAVINGS','InvestmentSavings','Investment savings products');
 
 -- (Same product insert list as the sample_data.sql)
 INSERT INTO product_catalogue (category_id, product_code, name, description, price, interest_rate)
@@ -73,13 +222,18 @@ VALUES
 ((SELECT id FROM product_categories WHERE name='Credit Cards'),'CC-004','Business Pro','Business rewards and reporting',0,0.2099),
 ((SELECT id FROM product_categories WHERE name='Credit Cards'),'CC-005','LowRate','Low interest rate credit card',0,0.0999);
 
+-- Chequing
 INSERT INTO product_catalogue (category_id, product_code, name, description, price)
 VALUES
-((SELECT id FROM product_categories WHERE name='Bank Accounts'),'BA-001','Everyday Checking','No monthly fee everyday account',0),
-((SELECT id FROM product_categories WHERE name='Bank Accounts'),'BA-002','Premium Savings','High-interest savings with ATM rebate',0),
-((SELECT id FROM product_categories WHERE name='Bank Accounts'),'BA-003','Student Account','Accounts tailored for students',0),
-((SELECT id FROM product_categories WHERE name='Bank Accounts'),'BA-004','Joint Checking','Joint account for two or more',0),
-((SELECT id FROM product_categories WHERE name='Bank Accounts'),'BA-005','Business Checking','Account for small business owners',0);
+((SELECT id FROM product_categories WHERE name='Chequing'),'BA-001','Everyday Checking','No monthly fee everyday account',0),
+((SELECT id FROM product_categories WHERE name='Chequing'),'BA-003','Student Account','Accounts tailored for students',0),
+((SELECT id FROM product_categories WHERE name='Chequing'),'BA-004','Joint Checking','Joint account for two or more',0),
+((SELECT id FROM product_categories WHERE name='Chequing'),'BA-005','Business Checking','Account for small business owners',0);
+
+-- Savings
+INSERT INTO product_catalogue (category_id, product_code, name, description, price)
+VALUES
+((SELECT id FROM product_categories WHERE name='Savings'),'BA-002','Premium Savings','High-interest savings with ATM rebate',0);
 
 INSERT INTO product_catalogue (category_id, product_code, name, description, price, interest_rate, term_months)
 VALUES
@@ -129,33 +283,54 @@ VALUES
 ((SELECT id FROM product_categories WHERE name='Insurance'),'IN-004','Critical Illness','Lump sum on diagnosis',0),
 ((SELECT id FROM product_categories WHERE name='Insurance'),'IN-005','Travel Insurance','Short-term travel coverage',0);
 
+-- Equity
 INSERT INTO product_catalogue (category_id, product_code, name, description, price)
 VALUES
-((SELECT id FROM product_categories WHERE name='Investments'),'INV-001','ETF Income','Exchange-traded fund for income',0),
-((SELECT id FROM product_categories WHERE name='Investments'),'INV-002','Robo Advisor','Managed portfolio service',0),
-((SELECT id FROM product_categories WHERE name='Investments'),'INV-003','Segregated Fund','Insurance-backed investment',0),
-((SELECT id FROM product_categories WHERE name='Investments'),'INV-004','Managed Account','Advisor-managed account',0),
-((SELECT id FROM product_categories WHERE name='Investments'),'INV-005','High Yield Note','Structured product with yield',0);
+((SELECT id FROM product_categories WHERE name='Equity'),'INV-001','ETF Income','Exchange-traded fund for income',0),
+((SELECT id FROM product_categories WHERE name='Equity'),'INV-003','Segregated Fund','Insurance-backed investment',0),
+((SELECT id FROM product_categories WHERE name='Equity'),'INV-005','High Yield Note','Structured product with yield',0);
+
+-- Investment Savings
+INSERT INTO product_catalogue (category_id, product_code, name, description, price)
+VALUES
+((SELECT id FROM product_categories WHERE name='InvestmentSavings'),'INV-002','Robo Advisor','Managed portfolio service',0),
+((SELECT id FROM product_categories WHERE name='InvestmentSavings'),'INV-004','Managed Account','Advisor-managed account',0);
 
 -- Ensure example accounts exist (use fixed account numbers) and map owners
 INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
-SELECT 'ACCT0000001', 1, 1, 'CAD', 1000.00
+SELECT 'ACCT0000001', 1, 'CHEQUING', 'CAD', 1000.00
 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCT0000001');
 
 INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
-SELECT 'ACCT0000002', 1, 2, 'CAD', 500.00
+SELECT 'ACCT0000002', 1, 'SAVINGS', 'CAD', 500.00
 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCT0000002');
 
+INSERT INTO parties (party_type, personal_customer_id)
+SELECT 'personal', id
+FROM personal_customers
+WHERE email IN ('john.doe@example.com','jane.roe@example.com')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO bank_accounts (account_id, bank_account_type)
+SELECT id, CASE WHEN type_id = 'CHEQUING' THEN 'chequing' ELSE 'savings' END
+FROM accounts
+WHERE account_number IN ('ACCT0000001','ACCT0000002')
+ON CONFLICT DO NOTHING;
+
 -- Map owners (idempotent)
-INSERT INTO account_owners (account_id, customer_id, is_primary)
-SELECT a.id, c.id, true
-FROM accounts a JOIN personal_customers c ON c.email='john.doe@example.com'
+INSERT INTO party_account_reln (party_id, account_id, role, ownership_percent)
+SELECT p.id, a.id, 'owner', 100
+FROM accounts a
+JOIN personal_customers c ON c.email='john.doe@example.com'
+JOIN parties p ON p.personal_customer_id = c.id
 WHERE a.account_number='ACCT0000001'
 ON CONFLICT DO NOTHING;
 
-INSERT INTO account_owners (account_id, customer_id, is_primary)
-SELECT a.id, c.id, true
-FROM accounts a JOIN personal_customers c ON c.email='jane.roe@example.com'
+INSERT INTO party_account_reln (party_id, account_id, role, ownership_percent)
+SELECT p.id, a.id, 'owner', 100
+FROM accounts a
+JOIN personal_customers c ON c.email='jane.roe@example.com'
+JOIN parties p ON p.personal_customer_id = c.id
 WHERE a.account_number='ACCT0000002'
 ON CONFLICT DO NOTHING;
 
@@ -181,6 +356,18 @@ VALUES
 ('Henry','Rodriguez','1976-12-19','henry.rodriguez@example.com','+14165550026','CA',(SELECT id FROM segments WHERE code='PW')),
 ('Evelyn','Lewis','1994-06-06','evelyn.lewis@example.com','+17875550027','CA',(SELECT id FROM segments WHERE code='RETAIL'))
 ON CONFLICT (email) DO NOTHING;
+
+INSERT INTO parties (party_type, personal_customer_id)
+SELECT 'personal', id
+FROM personal_customers
+WHERE email IN (
+  'liam.smith@example.com','olivia.brown@example.com','noah.johnson@example.com','emma.wilson@example.com',
+  'oliver.taylor@example.com','ava.anderson@example.com','william.thomas@example.com','sophia.jackson@example.com',
+  'benjamin.white@example.com','isabella.harris@example.com','elijah.martin@example.com','mia.thompson@example.com',
+  'james.garcia@example.com','charlotte.martinez@example.com','lucas.robinson@example.com','amelia.clark@example.com',
+  'henry.rodriguez@example.com','evelyn.lewis@example.com'
+)
+ON CONFLICT DO NOTHING;
 
 -- Addresses (per Canada Post parts)
 INSERT INTO personal_addresses (customer_id, type, civic_number, street_name, street_type, city, province, postal_code, country, effective_from)
@@ -209,50 +396,121 @@ SELECT id, 'Maple Financial', 'Manager', '2015-06-01', 120000 FROM personal_cust
 -- Accounts and ownerships (create accounts and map owners, including joint accounts)
 -- Individual accounts
 INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
-SELECT 'ACCT0000101', 1, 1, 'CAD', 2500.00 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCT0000101');
+SELECT 'ACCT0000101', 1, 'CHEQUING', 'CAD', 2500.00 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCT0000101');
 
-INSERT INTO account_owners (account_id, customer_id, is_primary)
-SELECT a.id, pc.id, true FROM accounts a JOIN personal_customers pc ON pc.email='liam.smith@example.com' WHERE a.account_number='ACCT0000101' ON CONFLICT DO NOTHING;
+INSERT INTO bank_accounts (account_id, bank_account_type)
+SELECT id, 'chequing' FROM accounts WHERE account_number='ACCT0000101'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO party_account_reln (party_id, account_id, role, ownership_percent)
+SELECT p.id, a.id, 'owner', 100
+FROM accounts a
+JOIN personal_customers pc ON pc.email='liam.smith@example.com'
+JOIN parties p ON p.personal_customer_id = pc.id
+WHERE a.account_number='ACCT0000101'
+ON CONFLICT DO NOTHING;
 
 INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
-SELECT 'ACCT0000102', 1, 2, 'CAD', 5000.00 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCT0000102');
-INSERT INTO account_owners (account_id, customer_id, is_primary)
-SELECT a.id, pc.id, true FROM accounts a JOIN personal_customers pc ON pc.email='olivia.brown@example.com' WHERE a.account_number='ACCT0000102' ON CONFLICT DO NOTHING;
+SELECT 'ACCT0000102', 1, 'SAVINGS', 'CAD', 5000.00 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCT0000102');
+INSERT INTO bank_accounts (account_id, bank_account_type)
+SELECT id, 'savings' FROM accounts WHERE account_number='ACCT0000102'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO party_account_reln (party_id, account_id, role, ownership_percent)
+SELECT p.id, a.id, 'owner', 100
+FROM accounts a
+JOIN personal_customers pc ON pc.email='olivia.brown@example.com'
+JOIN parties p ON p.personal_customer_id = pc.id
+WHERE a.account_number='ACCT0000102'
+ON CONFLICT DO NOTHING;
 
 -- Joint account between Noah and Emma
 INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
-SELECT 'ACCT0000110', 1, 1, 'CAD', 10000.00 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCT0000110');
-INSERT INTO account_owners (account_id, customer_id, is_primary)
-SELECT a.id, pc.id, (pc.email='noah.johnson@example.com')::boolean FROM accounts a JOIN personal_customers pc ON pc.email IN ('noah.johnson@example.com','emma.wilson@example.com') WHERE a.account_number='ACCT0000110' ON CONFLICT DO NOTHING;
+SELECT 'ACCT0000110', 1, 'CHEQUING', 'CAD', 10000.00 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCT0000110');
+INSERT INTO bank_accounts (account_id, bank_account_type)
+SELECT id, 'chequing' FROM accounts WHERE account_number='ACCT0000110'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO party_account_reln (party_id, account_id, role, ownership_percent)
+SELECT p.id, a.id, 'owner', 50
+FROM accounts a
+JOIN personal_customers pc ON pc.email IN ('noah.johnson@example.com','emma.wilson@example.com')
+JOIN parties p ON p.personal_customer_id = pc.id
+WHERE a.account_number='ACCT0000110'
+ON CONFLICT DO NOTHING;
 
 -- More accounts for others
 INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
-SELECT 'ACCT0000120', 1, 1, 'CAD', 1500.00 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCT0000120');
-INSERT INTO account_owners (account_id, customer_id, is_primary)
-SELECT a.id, pc.id, true FROM accounts a JOIN personal_customers pc ON pc.email='oliver.taylor@example.com' WHERE a.account_number='ACCT0000120' ON CONFLICT DO NOTHING;
+SELECT 'ACCT0000120', 1, 'CHEQUING', 'CAD', 1500.00 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCT0000120');
+INSERT INTO bank_accounts (account_id, bank_account_type)
+SELECT id, 'chequing' FROM accounts WHERE account_number='ACCT0000120'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO party_account_reln (party_id, account_id, role, ownership_percent)
+SELECT p.id, a.id, 'owner', 100
+FROM accounts a
+JOIN personal_customers pc ON pc.email='oliver.taylor@example.com'
+JOIN parties p ON p.personal_customer_id = pc.id
+WHERE a.account_number='ACCT0000120'
+ON CONFLICT DO NOTHING;
 
 INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
-SELECT 'ACCT0000130', 1, 2, 'CAD', 8000.00 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCT0000130');
-INSERT INTO account_owners (account_id, customer_id, is_primary)
-SELECT a.id, pc.id, true FROM accounts a JOIN personal_customers pc ON pc.email='ava.anderson@example.com' WHERE a.account_number='ACCT0000130' ON CONFLICT DO NOTHING;
+SELECT 'ACCT0000130', 1, 'SAVINGS', 'CAD', 8000.00 WHERE NOT EXISTS (SELECT 1 FROM accounts WHERE account_number='ACCT0000130');
+INSERT INTO bank_accounts (account_id, bank_account_type)
+SELECT id, 'savings' FROM accounts WHERE account_number='ACCT0000130'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO party_account_reln (party_id, account_id, role, ownership_percent)
+SELECT p.id, a.id, 'owner', 100
+FROM accounts a
+JOIN personal_customers pc ON pc.email='ava.anderson@example.com'
+JOIN parties p ON p.personal_customer_id = pc.id
+WHERE a.account_number='ACCT0000130'
+ON CONFLICT DO NOTHING;
 
 -- Sample transactions to exercise triggers
 INSERT INTO transactions (from_account_id, to_account_id, amount, type, status, description)
 SELECT (SELECT id FROM accounts WHERE account_number='ACCT0000101'), (SELECT id FROM accounts WHERE account_number='ACCT0000102'), 200.00, 'transfer', 'posted', 'Gift' WHERE NOT EXISTS (SELECT 1 FROM transactions t WHERE t.description='Gift' AND t.amount=200.00);
 
--- Add a few more owners mapping for joint households
-INSERT INTO account_owners (account_id, customer_id, is_primary)
-SELECT a.id, pc.id, false FROM accounts a JOIN personal_customers pc ON pc.email IN ('william.thomas@example.com','sophia.jackson@example.com') WHERE a.account_number='ACCT0000130' ON CONFLICT DO NOTHING;
+-- Add a few more authorized users for joint households
+INSERT INTO party_account_reln (party_id, account_id, role)
+SELECT p.id, a.id, 'authorized-user'
+FROM accounts a
+JOIN personal_customers pc ON pc.email IN ('william.thomas@example.com','sophia.jackson@example.com')
+JOIN parties p ON p.personal_customer_id = pc.id
+WHERE a.account_number='ACCT0000130'
+ON CONFLICT DO NOTHING;
 
 -- Seed companies for non-personal customers
-INSERT INTO companies (name, registration_number, tax_id, country)
+INSERT INTO companies (name, registration_number, tax_id, business_structure_code, naics_code, country)
 VALUES
-('Harbour Logistics','HL-REG-100','TAX-HL-100','CA'),
-('Greenfields Farming Ltd','GF-REG-200','TAX-GF-200','CA')
+('Harbour Logistics','HL-REG-100','TAX-HL-100','CORP','48411','CA'),
+('Greenfields Farming Ltd','GF-REG-200','TAX-GF-200','LTD','111130','CA')
 ON CONFLICT (registration_number) DO NOTHING;
+
+INSERT INTO parties (party_type, company_id)
+SELECT 'company', id
+FROM companies
+WHERE registration_number IN ('HL-REG-100','GF-REG-200')
+ON CONFLICT DO NOTHING;
 
 -- Ensure branches have Canadian address parts and a transit code (idempotent)
 UPDATE branches SET civic_number='200', street_name='King', street_type='St', city='Toronto', province='ON', postal_code='M5H 4E1', branch_transit='20001' WHERE branch_transit IS NULL OR branch_transit='';
+
+-- HR roles (idempotent)
+INSERT INTO hr_roles (code, name, description)
+VALUES
+('DEV','Developer','Software development'),
+('BRANCH_MANAGER','Branch Manager','Responsible for branch operations'),
+('TELLER','Teller','Branch teller - front-line cash and service'),
+('FA','Financial Advisor','Advisory and sales'),
+('CSR','Customer Service Representative','Customer service and account support'),
+('MA','Mortgage Advisor','Mortgage sales and servicing'),
+('BACKOFFICE','Back Office','Back-office operations'),
+('TB','Teller Back','Cash operations support'),
+('CEO','Chief Executive Officer','Executive leadership'),
+('VP','Vice President','Executive management')
+ON CONFLICT (code) DO NOTHING;
 
 -- Seed employees as personal_customers and employee entries
 INSERT INTO personal_customers (first_name, last_name, dob, email, phone, country, segment_id)
@@ -261,6 +519,12 @@ VALUES
 ('Grace','Ops','1985-07-07','grace.ops@ssbank.example.com','+14165550996','CA',(SELECT id FROM segments WHERE code='RETAIL'))
 ON CONFLICT (email) DO NOTHING;
 
+INSERT INTO parties (party_type, personal_customer_id)
+SELECT 'personal', id
+FROM personal_customers
+WHERE email IN ('ethan.branch@ssbank.example.com','grace.ops@ssbank.example.com')
+ON CONFLICT DO NOTHING;
+
 INSERT INTO employees (personal_customer_id, employee_number, hr_role_id, branch_id, hired_at)
 SELECT pc.id, 'EMP0003', hr.id, b.id, '2019-01-15'
 FROM personal_customers pc JOIN hr_roles hr ON hr.code='TELLER' JOIN branches b ON b.name ILIKE '%Main%' WHERE pc.email='ethan.branch@ssbank.example.com'
@@ -268,7 +532,7 @@ ON CONFLICT (employee_number) DO NOTHING;
 
 INSERT INTO employees (personal_customer_id, employee_number, hr_role_id, branch_id, hired_at)
 SELECT pc.id, 'EMP0004', hr.id, b.id, '2017-05-10'
-FROM personal_customers pc JOIN hr_roles hr ON hr.code='OPS' JOIN branches b ON b.name ILIKE '%Main%' WHERE pc.email='grace.ops@ssbank.example.com'
+FROM personal_customers pc JOIN hr_roles hr ON hr.code='BACKOFFICE' JOIN branches b ON b.name ILIKE '%Main%' WHERE pc.email='grace.ops@ssbank.example.com'
 ON CONFLICT (employee_number) DO NOTHING;
 
 -- Bulk generation (mirror): 50 personal customers, 10 companies, accounts, joint accounts, and transactions
@@ -285,41 +549,81 @@ SELECT
 FROM nums
 ON CONFLICT (email) DO NOTHING;
 
-INSERT INTO companies (name, registration_number, tax_id, country)
-SELECT format('BulkCo %02d', n), format('BULK-REG-%03d', n), format('BULK-TAX-%03d', n), 'CA' FROM generate_series(1,10) n
+INSERT INTO parties (party_type, personal_customer_id)
+SELECT 'personal', id
+FROM personal_customers
+WHERE email LIKE 'bulk.cust%'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO companies (name, registration_number, tax_id, business_structure_code, naics_code, country)
+SELECT format('BulkCo %02d', n), format('BULK-REG-%03d', n), format('BULK-TAX-%03d', n), 'CORP', '54161', 'CA' FROM generate_series(1,10) n
 ON CONFLICT (registration_number) DO NOTHING;
+
+INSERT INTO parties (party_type, company_id)
+SELECT 'company', id
+FROM companies
+WHERE registration_number LIKE 'BULK-REG-%'
+ON CONFLICT DO NOTHING;
 
 -- Create one account per new personal customer and link them
 WITH new_cust AS (
 	SELECT id, email, ROW_NUMBER() OVER (ORDER BY id) as rn FROM personal_customers WHERE email LIKE 'bulk.cust%'
 )
 INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
-SELECT format('ACCT%07s', 300000 + rn), (SELECT id FROM branches ORDER BY id LIMIT 1), (1 + (rn % 2)), 'CAD', (round((random()*10000)::numeric,2))
+SELECT format('ACCT%07s', 300000 + rn), (SELECT id FROM branches ORDER BY id LIMIT 1),
+       CASE WHEN (rn % 2) = 0 THEN 'CHEQUING' ELSE 'SAVINGS' END,
+       'CAD', (round((random()*10000)::numeric,2))
 FROM new_cust
 ON CONFLICT (account_number) DO NOTHING;
 
-INSERT INTO account_owners (account_id, customer_id, is_primary)
-SELECT a.id, nc.id, true
-FROM accounts a JOIN new_cust nc ON a.account_number = format('ACCT%07s', 300000 + nc.rn)
+INSERT INTO party_account_reln (party_id, account_id, role, ownership_percent)
+SELECT p.id, a.id, 'owner', 100
+FROM accounts a
+JOIN new_cust nc ON a.account_number = format('ACCT%07s', 300000 + nc.rn)
+JOIN parties p ON p.personal_customer_id = nc.id
+ON CONFLICT DO NOTHING;
+
+INSERT INTO bank_accounts (account_id, bank_account_type)
+SELECT a.id, CASE WHEN a.type_id = 'CHEQUING' THEN 'chequing' ELSE 'savings' END
+FROM accounts a
+JOIN new_cust nc ON a.account_number = format('ACCT%07s', 300000 + nc.rn)
 ON CONFLICT DO NOTHING;
 
 -- Joint accounts
 INSERT INTO accounts (account_number, branch_id, type_id, currency, balance)
-SELECT format('ACCT%07s', 400000 + rn), (SELECT id FROM branches ORDER BY id LIMIT 1), 1, 'CAD', 5000.00 FROM generate_series(1,10) rn
+SELECT format('ACCT%07s', 400000 + rn), (SELECT id FROM branches ORDER BY id LIMIT 1), 'CHEQUING', 'CAD', 5000.00 FROM generate_series(1,10) rn
 ON CONFLICT (account_number) DO NOTHING;
 
 -- Link joint owners by pairing sequential bulk customers
-WITH pairs AS (
-	SELECT a.id AS account_id, pc1.id AS cust1, pc2.id AS cust2
-	FROM accounts a, LATERAL (SELECT id FROM personal_customers WHERE email LIKE 'bulk.cust%' ORDER BY id LIMIT 1 OFFSET ((a.id::int % 50))) pc1,
-			 LATERAL (SELECT id FROM personal_customers WHERE email LIKE 'bulk.cust%' ORDER BY id LIMIT 1 OFFSET ((a.id::int+1 % 50))) pc2
-	WHERE a.account_number LIKE 'ACCT004%'
+WITH bulk_cust AS (
+	SELECT id, row_number() OVER (ORDER BY id) AS rn
+	FROM personal_customers
+	WHERE email LIKE 'bulk.cust%'
+),
+joint_accounts AS (
+	SELECT id, row_number() OVER (ORDER BY account_number) AS rn
+	FROM accounts
+	WHERE account_number LIKE 'ACCT004%'
+),
+pairs AS (
+	SELECT ja.id AS account_id,
+	       bc1.id AS cust1,
+	       bc2.id AS cust2
+	FROM joint_accounts ja
+	JOIN bulk_cust bc1 ON bc1.rn = ((ja.rn - 1) * 2) % (SELECT COUNT(*) FROM bulk_cust) + 1
+	JOIN bulk_cust bc2 ON bc2.rn = ((ja.rn - 1) * 2 + 1) % (SELECT COUNT(*) FROM bulk_cust) + 1
 )
-INSERT INTO account_owners (account_id, customer_id, is_primary)
-SELECT account_id, cust1, true FROM pairs ON CONFLICT DO NOTHING;
+INSERT INTO party_account_reln (party_id, account_id, role, ownership_percent)
+SELECT p.id, pr.account_id, 'owner', 50
+FROM pairs pr
+JOIN parties p ON p.personal_customer_id IN (pr.cust1, pr.cust2)
+ON CONFLICT DO NOTHING;
 
-INSERT INTO account_owners (account_id, customer_id, is_primary)
-SELECT account_id, cust2, false FROM pairs ON CONFLICT DO NOTHING;
+INSERT INTO bank_accounts (account_id, bank_account_type)
+SELECT id, 'chequing'
+FROM accounts
+WHERE account_number LIKE 'ACCT004%'
+ON CONFLICT DO NOTHING;
 
 -- Transactions batch (guarded by marker)
 DO $$

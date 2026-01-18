@@ -94,8 +94,23 @@ CREATE TABLE IF NOT EXISTS companies (
     name TEXT NOT NULL,
     registration_number TEXT UNIQUE,
     tax_id TEXT,
+    business_structure_code TEXT,
+    naics_code TEXT,
     country TEXT DEFAULT 'CA',
     created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Parties (either personal or company)
+CREATE TABLE parties (
+    id BIGSERIAL PRIMARY KEY,
+    party_type TEXT NOT NULL CHECK (party_type IN ('personal','company')),
+    personal_customer_id BIGINT UNIQUE REFERENCES personal_customers(id) ON DELETE CASCADE,
+    company_id BIGINT UNIQUE REFERENCES companies(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    CHECK (
+        (personal_customer_id IS NOT NULL AND company_id IS NULL) OR
+        (personal_customer_id IS NULL AND company_id IS NOT NULL)
+    )
 );
 
 -- Branches
@@ -103,45 +118,65 @@ CREATE TABLE branches (
     id BIGSERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     address TEXT,
+    civic_number TEXT,
+    street_name TEXT,
+    street_type TEXT,
     city TEXT,
-    state TEXT,
-    zip TEXT,
-    country TEXT DEFAULT 'US',
+    province CHAR(2) REFERENCES provinces(code),
+    postal_code TEXT,
+    country TEXT DEFAULT 'CA',
+    branch_transit TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- HR roles
+CREATE TABLE hr_roles (
+    id SERIAL PRIMARY KEY,
+    code VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(150) NOT NULL,
+    description TEXT,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Employees
 CREATE TABLE employees (
     id BIGSERIAL PRIMARY KEY,
+    personal_customer_id BIGINT REFERENCES personal_customers(id) ON DELETE SET NULL,
+    employee_number TEXT UNIQUE,
+    hr_role_id INTEGER REFERENCES hr_roles(id),
     branch_id BIGINT REFERENCES branches(id) ON DELETE SET NULL,
-    first_name TEXT NOT NULL,
-    last_name TEXT NOT NULL,
+    first_name TEXT,
+    last_name TEXT,
     role TEXT,
     email TEXT UNIQUE,
     hired_at DATE,
-    active BOOLEAN DEFAULT true
+    active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Account types
 CREATE TABLE account_types (
-    id SMALLINT PRIMARY KEY,
+    id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
-    interest_rate NUMERIC(6,4) DEFAULT 0,
     description TEXT
 );
 
-INSERT INTO account_types (id, name, interest_rate, description)
-VALUES (1,'checking',0,'Standard checking account'), (2,'savings',0.01,'Interest-bearing savings');
+INSERT INTO account_types (id, name, description)
+VALUES
+('CHEQUING','Chequing','Standard chequing account'),
+('SAVINGS','Savings','Interest-bearing savings'),
+('MORTGAGE','Mortgage','Mortgage account'),
+('PLC','Personal Line of Credit','Personal line of credit'),
+('INVESTMENT','Investment','Investment account');
 
 -- Accounts
 CREATE TABLE accounts (
     id BIGSERIAL PRIMARY KEY,
     account_number TEXT UNIQUE NOT NULL,
     branch_id BIGINT REFERENCES branches(id),
-    type_id SMALLINT NOT NULL REFERENCES account_types(id),
+    type_id TEXT NOT NULL REFERENCES account_types(id),
     currency CHAR(3) DEFAULT 'CAD',
     balance NUMERIC(18,2) DEFAULT 0 NOT NULL,
-    overdraft_limit NUMERIC(18,2) DEFAULT 0,
     status TEXT DEFAULT 'open',
     opened_at TIMESTAMPTZ DEFAULT now(),
     closed_at TIMESTAMPTZ
@@ -149,17 +184,43 @@ CREATE TABLE accounts (
 
 CREATE INDEX idx_accounts_account_number ON accounts(account_number);
 
--- Account owners (many-to-many between accounts and customers)
-CREATE TABLE account_owners (
+-- Party-account relationships (many-to-many between accounts and parties)
+CREATE TABLE party_account_reln (
+    party_id BIGINT NOT NULL REFERENCES parties(id) ON DELETE CASCADE,
     account_id BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-    customer_id BIGINT NOT NULL REFERENCES personal_customers(id) ON DELETE CASCADE,
-    is_primary BOOLEAN DEFAULT false,
+    role TEXT NOT NULL,
     ownership_percent NUMERIC(5,2),
-    PRIMARY KEY (account_id, customer_id)
+    PRIMARY KEY (party_id, account_id),
+    CHECK (role <> 'owner' OR ownership_percent IS NOT NULL)
 );
 
-CREATE INDEX idx_account_owners_customer ON account_owners(customer_id);
-CREATE INDEX idx_account_owners_account ON account_owners(account_id);
+CREATE INDEX idx_party_account_reln_party ON party_account_reln(party_id);
+CREATE INDEX idx_party_account_reln_account ON party_account_reln(account_id);
+
+-- Account subtypes
+CREATE TABLE bank_accounts (
+    account_id BIGINT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+    bank_account_type TEXT NOT NULL CHECK (bank_account_type IN ('chequing','savings')),
+    overdraft_limit NUMERIC(18,2) DEFAULT 0,
+    interest_rate NUMERIC(6,4) DEFAULT 0
+);
+
+CREATE TABLE mortgages (
+    account_id BIGINT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+    principal NUMERIC(18,2) NOT NULL,
+    interest_rate NUMERIC(6,4) NOT NULL,
+    start_date DATE,
+    end_date DATE,
+    status TEXT DEFAULT 'active'
+);
+
+CREATE TABLE plc_accounts (
+    account_id BIGINT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+    credit_limit NUMERIC(18,2) NOT NULL,
+    interest_rate NUMERIC(6,4) NOT NULL,
+    status TEXT DEFAULT 'active'
+);
+
 
 -- Transactions
 CREATE TABLE transactions (
@@ -168,7 +229,7 @@ CREATE TABLE transactions (
     from_account_id BIGINT REFERENCES accounts(id) ON DELETE SET NULL,
     to_account_id BIGINT REFERENCES accounts(id) ON DELETE SET NULL,
     amount NUMERIC(18,2) NOT NULL CHECK (amount > 0),
-    currency CHAR(3) DEFAULT 'USD',
+    currency CHAR(3) DEFAULT 'CAD',
     type TEXT NOT NULL, -- deposit, withdrawal, transfer, payment, fee, interest, reversal
     status TEXT NOT NULL DEFAULT 'pending', -- pending, posted, reversed, failed
     description TEXT,
@@ -189,8 +250,7 @@ CREATE INDEX idx_tx_created_at ON transactions(created_at DESC);
 
 -- Loans
 CREATE TABLE loans (
-    id BIGSERIAL PRIMARY KEY,
-    account_id BIGINT REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id BIGINT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
     principal NUMERIC(18,2) NOT NULL,
     balance NUMERIC(18,2) NOT NULL,
     interest_rate NUMERIC(6,4) NOT NULL,
@@ -199,13 +259,54 @@ CREATE TABLE loans (
     status TEXT DEFAULT 'active'
 );
 
+CREATE TABLE investment_accounts (
+    account_id BIGINT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+    registration_type TEXT NOT NULL,
+    name TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE gic_inv (
+    id BIGSERIAL PRIMARY KEY,
+    investment_account_id BIGINT NOT NULL REFERENCES investment_accounts(account_id) ON DELETE CASCADE,
+    principal NUMERIC(18,2) NOT NULL,
+    interest_rate NUMERIC(6,4) NOT NULL,
+    term_months INT,
+    maturity_date DATE
+);
+
+CREATE TABLE mutual_fund_inv (
+    id BIGSERIAL PRIMARY KEY,
+    investment_account_id BIGINT NOT NULL REFERENCES investment_accounts(account_id) ON DELETE CASCADE,
+    fund_name TEXT NOT NULL,
+    units NUMERIC(18,6) NOT NULL,
+    nav NUMERIC(18,6),
+    currency CHAR(3) DEFAULT 'CAD'
+);
+
+CREATE TABLE equity_inv (
+    id BIGSERIAL PRIMARY KEY,
+    investment_account_id BIGINT NOT NULL REFERENCES investment_accounts(account_id) ON DELETE CASCADE,
+    symbol TEXT NOT NULL,
+    shares NUMERIC(18,6) NOT NULL,
+    avg_price NUMERIC(18,6),
+    currency CHAR(3) DEFAULT 'CAD'
+);
+
+CREATE TABLE investment_savings_inv (
+    id BIGSERIAL PRIMARY KEY,
+    investment_account_id BIGINT NOT NULL REFERENCES investment_accounts(account_id) ON DELETE CASCADE,
+    balance NUMERIC(18,2) NOT NULL,
+    interest_rate NUMERIC(6,4),
+    currency CHAR(3) DEFAULT 'CAD'
+);
 -- Cards
 CREATE TABLE cards (
-    id BIGSERIAL PRIMARY KEY,
     card_number TEXT NOT NULL UNIQUE,
-    account_id BIGINT REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id BIGINT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
     card_type TEXT, -- debit, credit
     status TEXT DEFAULT 'active',
+    interest_rate NUMERIC(6,4) DEFAULT 0,
     expiry_date DATE,
     created_at TIMESTAMPTZ DEFAULT now()
 );
@@ -213,10 +314,10 @@ CREATE TABLE cards (
 -- Card transactions (POS)
 CREATE TABLE card_transactions (
     id BIGSERIAL PRIMARY KEY,
-    card_id BIGINT REFERENCES cards(id) ON DELETE CASCADE,
+    card_id BIGINT REFERENCES cards(account_id) ON DELETE CASCADE,
     merchant TEXT,
     amount NUMERIC(18,2) NOT NULL,
-    currency CHAR(3) DEFAULT 'USD',
+    currency CHAR(3) DEFAULT 'CAD',
     txn_time TIMESTAMPTZ DEFAULT now(),
     status TEXT DEFAULT 'authorized'
 );
@@ -234,14 +335,14 @@ CREATE TABLE audit_logs (
 
 -- Product catalogue (categories + products)
 CREATE TABLE product_categories (
-    id SMALLSERIAL PRIMARY KEY,
+    id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
     description TEXT
 );
 
 CREATE TABLE product_catalogue (
     id BIGSERIAL PRIMARY KEY,
-    category_id SMALLINT NOT NULL REFERENCES product_categories(id) ON DELETE RESTRICT,
+    category_id TEXT NOT NULL REFERENCES product_categories(id) ON DELETE RESTRICT,
     product_code TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     description TEXT,

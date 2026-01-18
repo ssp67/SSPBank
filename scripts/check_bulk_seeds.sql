@@ -15,8 +15,9 @@ SELECT count(*) AS account_count FROM accounts;
 -- 4) Accounts and their owners (useful to spot joint accounts)
 SELECT a.account_number, string_agg(pc.email, ', ') AS owners
 FROM accounts a
-JOIN account_owners ao ON ao.account_id = a.id
-JOIN personal_customers pc ON pc.id = ao.customer_id
+JOIN party_account_reln par ON par.account_id = a.id AND par.role = 'owner'
+JOIN parties p ON p.id = par.party_id
+JOIN personal_customers pc ON pc.id = p.personal_customer_id
 GROUP BY a.account_number
 ORDER BY a.account_number;
 

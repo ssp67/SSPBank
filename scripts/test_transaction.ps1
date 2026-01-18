@@ -36,7 +36,7 @@ $desc = "TEST_TX_${ts}_${rand}"
 $descEsc = $desc -replace "'", "''"
 
 # Insert test transaction with status 'posted'
-$insSql = "INSERT INTO transactions (from_account_id,to_account_id,amount,type,status,description,initiated_by_customer_id) VALUES ($fromId,$toId,$Amount,'transfer','posted','$descEsc',(SELECT customer_id FROM account_owners WHERE account_id=$fromId AND is_primary=true LIMIT 1)) RETURNING id;"
+$insSql = "INSERT INTO transactions (from_account_id,to_account_id,amount,type,status,description,initiated_by_customer_id) VALUES ($fromId,$toId,$Amount,'transfer','posted','$descEsc',(SELECT p.personal_customer_id FROM party_account_reln par JOIN parties p ON p.id=par.party_id WHERE par.account_id=$fromId AND par.role='owner' AND p.personal_customer_id IS NOT NULL ORDER BY par.ownership_percent DESC NULLS LAST LIMIT 1)) RETURNING id;"
 $inserted = ExecSql($insSql) | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^[0-9]+' }
 if (-not $inserted) {
     Write-Error "Failed to insert test transaction (insert returned nothing)."
@@ -72,7 +72,7 @@ else {
 # Create reversal transaction to restore balances
 $revDesc = "REVERSAL_$txId"
 $revDescEsc = $revDesc -replace "'", "''"
-$revIns = ExecSql("INSERT INTO transactions (from_account_id,to_account_id,amount,type,status,description,initiated_by_customer_id) VALUES ($toId,$fromId,$Amount,'reversal','posted','$revDescEsc',(SELECT customer_id FROM account_owners WHERE account_id=$toId AND is_primary=true LIMIT 1)) RETURNING id;") | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^[0-9]+' }
+$revIns = ExecSql("INSERT INTO transactions (from_account_id,to_account_id,amount,type,status,description,initiated_by_customer_id) VALUES ($toId,$fromId,$Amount,'reversal','posted','$revDescEsc',(SELECT p.personal_customer_id FROM party_account_reln par JOIN parties p ON p.id=par.party_id WHERE par.account_id=$toId AND par.role='owner' AND p.personal_customer_id IS NOT NULL ORDER BY par.ownership_percent DESC NULLS LAST LIMIT 1)) RETURNING id;") | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^[0-9]+' }
 if (-not $revIns) {
     Write-Warning "Failed to insert reversal transaction; manual cleanup may be required."
     if ($status -eq 'OK') { Write-Host "Test succeeded but reversal failed: $txId"; exit 0 } else { exit 5 }
