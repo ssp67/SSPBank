@@ -1,4 +1,4 @@
-# Bank Schema ERD (Mermaid)
+# Bank Schema ERD (Markdown)
 
 ```mermaid
 erDiagram
